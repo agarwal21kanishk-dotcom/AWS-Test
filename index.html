@@ -421,6 +421,9 @@ input:checked + .switch::after{transform:translateX(18px)}
 <div class="toast" id="toast"></div>
 
 <script>
+// ===== PUT YOUR OPENROUTER KEY BETWEEN THE QUOTES BELOW (e.g. 'sk-or-v1-...') =====
+const HARDCODED_KEY='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';
+// ==================================================================================
 const $=s=>document.querySelector(s), p=$('#prompt'), th=$('#thread'), stage=$('.stage');
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const pick=a=>a[Math.floor(Math.random()*a.length)];
@@ -553,7 +556,7 @@ function stream(d,text){
 function finish(d){d.classList.add('done');busy=false;document.body.classList.remove('busy')}
 const LS={get(k,d){try{return localStorage.getItem(k)||d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
 const DEFAULT_MODEL='nvidia/nemotron-3.5-lightning:free';
-const getKey=()=>LS.get('nova_or_key','').trim();
+const getKey=()=>(HARDCODED_KEY||'').trim()||LS.get('nova_or_key','').trim();
 const getModel=()=>LS.get('nova_or_model',DEFAULT_MODEL).trim()||DEFAULT_MODEL;
 const stripThink=t=>t.replace(/<think>[\s\S]*?(<\/think>|$)/g,'').replace(/^\s+/,'');
 function sysPrompt(o){
@@ -571,7 +574,7 @@ async function live(d,o){
   const el=d.querySelector('.txt'),key=getKey();
   if(!key){
     dropLastUser();
-    el.innerHTML=md("🔑 **Add your OpenRouter API key to start chatting.**\n\nOpen **Settings** (gear icon, top right), paste your key, and press Save. Then use the regenerate button under this message, or send it again.");
+    el.innerHTML=md("🔑 **Add your OpenRouter API key to start chatting.**\n\nPaste your key into `HARDCODED_KEY` at the top of the script, or open **Settings** (gear icon, top right) and save it there. Then use the regenerate button under this message, or send it again.");
     finish(d);location.hash='#settings';return;
   }
   if(o.search)toast("Web search isn't available with this model");
@@ -618,7 +621,7 @@ async function live(d,o){
 function updateModelLabel(){const m=getModel().split('/').pop().replace(/:free$/,'');$('#modelName').textContent=m.length>24?m.slice(0,24)+'…':m}
 function loadSettings(){
   $('#orKey').value=getKey();$('#orModel').value=getModel();
-  const k=$('#keyState');k.textContent=getKey()?'✓ Key saved in this browser':'No key saved yet';k.className=getKey()?'ok':'';
+  const k=$('#keyState');k.textContent=(HARDCODED_KEY||'').trim()?'✓ Using the key hard-coded in the file':getKey()?'✓ Key saved in this browser':'No key saved yet';k.className=getKey()?'ok':'';
   updateModelLabel();
 }
 function saveSettings(){
