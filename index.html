@@ -387,13 +387,13 @@ input:checked + .switch::after{transform:translateX(18px)}
     <h2>Settings <a href="#" class="close" aria-label="Close">✕</a></h2>
     <p class="sub">Personalise how Nova looks and behaves.</p>
     <div class="row stack">
-      <div>OpenRouter API key<small>Stored only in this browser. Get a free key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" style="text-decoration:underline">openrouter.ai/keys</a></small></div>
+      <div>API key override (optional)<small>Leave empty to use the server key. Stored only in this browser. Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" style="text-decoration:underline">openrouter.ai/keys</a></small></div>
       <div class="keybox"><input class="field" type="password" id="orKey" placeholder="sk-or-v1-…" autocomplete="off" spellcheck="false"><button type="button" class="ghost" onclick="toggleKey()">Show</button></div>
       <small id="keyState" style="margin-top:6px"></small>
     </div>
     <div class="row stack">
       <div>Model<small>Any OpenRouter model ID</small></div>
-      <input class="field" type="text" id="orModel" placeholder="nvidia/nemotron-3.5-lightning:free" autocomplete="off" spellcheck="false">
+      <input class="field" type="text" id="orModel" placeholder="liquid/lfm-2.5-2.6b:free" autocomplete="off" spellcheck="false">
       <div class="acts2"><button type="button" class="btn" onclick="saveSettings()" style="border:0">Save</button><button type="button" class="ghost" onclick="clearKey()">Remove key</button></div>
     </div>
     <div class="row"><div>Light theme<small>Switch between dark and light</small></div><label for="theme"><span class="switch" style="background:#555"></span></label></div>
@@ -421,9 +421,6 @@ input:checked + .switch::after{transform:translateX(18px)}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== PUT YOUR OPENROUTER KEY BETWEEN THE QUOTES BELOW (e.g. 'sk-or-v1-...') =====
-const HARDCODED_KEY='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';
-// ==================================================================================
 const $=s=>document.querySelector(s), p=$('#prompt'), th=$('#thread'), stage=$('.stage');
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const pick=a=>a[Math.floor(Math.random()*a.length)];
@@ -555,8 +552,9 @@ function stream(d,text){
 }
 function finish(d){d.classList.add('done');busy=false;document.body.classList.remove('busy')}
 const LS={get(k,d){try{return localStorage.getItem(k)||d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
-const DEFAULT_MODEL='nvidia/nemotron-3.5-lightning:free';
-const getKey=()=>(HARDCODED_KEY||'').trim()||LS.get('nova_or_key','').trim();
+const API_URL='/api/chat'; // Netlify redirect -> function, or local server.js
+const DEFAULT_MODEL='liquid/lfm-2.5-2.6b:free';
+const getKey=()=>LS.get('nova_or_key','').trim(); // optional per-browser override; the server key is used otherwise
 const getModel=()=>LS.get('nova_or_model',DEFAULT_MODEL).trim()||DEFAULT_MODEL;
 const stripThink=t=>t.replace(/<think>[\s\S]*?(<\/think>|$)/g,'').replace(/^\s+/,'');
 function sysPrompt(o){
@@ -572,23 +570,18 @@ function sysPrompt(o){
 function dropLastUser(){if(hist.length&&hist[hist.length-1].role==='user')hist.pop()}
 async function live(d,o){
   const el=d.querySelector('.txt'),key=getKey();
-  if(!key){
-    dropLastUser();
-    el.innerHTML=md("🔑 **Add your OpenRouter API key to start chatting.**\n\nPaste your key into `HARDCODED_KEY` at the top of the script, or open **Settings** (gear icon, top right) and save it there. Then use the regenerate button under this message, or send it again.");
-    finish(d);location.hash='#settings';return;
-  }
   if(o.search)toast("Web search isn't available with this model");
   let acc='';
   try{
-    const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+    const r=await fetch(API_URL,{
       method:'POST',
-      headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json','X-Title':'Nova Chat'},
+      headers:Object.assign({'Content-Type':'application/json'},key?{'X-User-Key':key}:{}),
       body:JSON.stringify({model:getModel(),stream:true,max_tokens:o.fast?1024:o.think?4096:2048,messages:[{role:'system',content:sysPrompt(o)},...hist]})
     });
     if(!r.ok){
       let m='HTTP '+r.status;
       try{const j=await r.json();m=(j.error&&j.error.message)||m}catch(e){}
-      if(r.status===401)m='OpenRouter rejected the API key. Check it in Settings.';
+      if(r.status===401)m='OpenRouter rejected the API key. Check OPENROUTER_API_KEY on the server (or the override in Settings).';
       else if(r.status===429)m='Rate limit reached (free models are limited). Wait a moment and try again.';
       else if(r.status===404||r.status===400)m+=' — check the model ID in Settings.';
       throw new Error(m);
@@ -621,7 +614,7 @@ async function live(d,o){
 function updateModelLabel(){const m=getModel().split('/').pop().replace(/:free$/,'');$('#modelName').textContent=m.length>24?m.slice(0,24)+'…':m}
 function loadSettings(){
   $('#orKey').value=getKey();$('#orModel').value=getModel();
-  const k=$('#keyState');k.textContent=(HARDCODED_KEY||'').trim()?'✓ Using the key hard-coded in the file':getKey()?'✓ Key saved in this browser':'No key saved yet';k.className=getKey()?'ok':'';
+  const k=$('#keyState');k.textContent=getKey()?'✓ Using the key saved in this browser':'Using the server key (OPENROUTER_API_KEY)';k.className='ok';
   updateModelLabel();
 }
 function saveSettings(){
@@ -680,7 +673,6 @@ document.querySelectorAll('.suggest button').forEach(b=>b.onclick=()=>{
 });
 p.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});
 loadSettings();
-if(!getKey())setTimeout(()=>toast('Add your OpenRouter key in Settings to chat'),900);
 addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();newChat()}});
 </script>
 </body>
